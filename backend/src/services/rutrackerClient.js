@@ -4,6 +4,7 @@ const iconv = require("iconv-lite");
 class RutrackerClient {
   constructor({ baseUrl, indexPath, bbSession, requestTimeoutMs }) {
     this.bbSession = bbSession;
+    this.baseUrl = baseUrl;
     this.targetUrl = new URL(indexPath, baseUrl).toString();
     this.httpClient = axios.create({
       timeout: requestTimeoutMs,
@@ -20,13 +21,54 @@ class RutrackerClient {
       throw new Error("Environment variable RUTRACKER_BB_SESSION is required for scraping.");
     }
 
-    const response = await this.httpClient.get(this.targetUrl, {
+    return this.fetchHtmlByUrl(this.targetUrl);
+  }
+
+  async fetchHtmlByUrl(url) {
+    if (!this.bbSession) {
+      throw new Error("Environment variable RUTRACKER_BB_SESSION is required for scraping.");
+    }
+
+    const response = await this.httpClient.get(new URL(url, this.baseUrl).toString(), {
       headers: {
         Cookie: `bb_session=${this.bbSession}`
       }
     });
 
     return iconv.decode(Buffer.from(response.data), "win1251");
+  }
+
+  async fetchTopicThanks({ topicId, tHash, formToken, refererUrl }) {
+    if (!this.bbSession) {
+      throw new Error("Environment variable RUTRACKER_BB_SESSION is required for scraping.");
+    }
+
+    const response = await this.httpClient.post(
+      new URL("/forum/ajax.php", this.baseUrl).toString(),
+      new URLSearchParams({
+        action: "thx",
+        mode: "get",
+        topic_id: String(topicId),
+        t_hash: tHash,
+        form_token: formToken
+      }).toString(),
+      {
+        responseType: "json",
+        headers: {
+          Cookie: `bb_session=${this.bbSession}`,
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+          "X-Requested-With": "XMLHttpRequest",
+          Accept: "application/json, text/javascript, */*; q=0.01",
+          Referer: new URL(refererUrl, this.baseUrl).toString()
+        }
+      }
+    );
+
+    if (typeof response.data === "string") {
+      return JSON.parse(response.data);
+    }
+
+    return response.data;
   }
 }
 

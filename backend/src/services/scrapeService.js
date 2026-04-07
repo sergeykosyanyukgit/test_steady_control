@@ -1,4 +1,6 @@
-class ScrapeService {
+const EventEmitter = require("events");
+
+class ScrapeService extends EventEmitter {
   constructor({
     forumNodeService,
     forumScraper,
@@ -8,6 +10,7 @@ class ScrapeService {
     scrapeOnStartup,
     scrapeStartupDelayMs
   }) {
+    super();
     this.forumNodeService = forumNodeService;
     this.forumScraper = forumScraper;
     this.rutrackerClient = rutrackerClient;
@@ -130,6 +133,7 @@ class ScrapeService {
 
       this.broadcastStatus();
       await this.broadcastTreeSnapshot();
+      this.emit("completed", this.getStatus());
     } catch (error) {
       const finishedAt = new Date().toISOString();
 
@@ -145,6 +149,7 @@ class ScrapeService {
       };
 
       this.broadcastStatus();
+      this.emit("failed", this.getStatus());
       throw error;
     }
   }

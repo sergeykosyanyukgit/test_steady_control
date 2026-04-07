@@ -1,7 +1,6 @@
 const http = require("http");
-const express = require("express");
-const swaggerUi = require("swagger-ui-express");
 
+const { createApp, registerWebSocketHandlers } = require("./app");
 const env = require("./config/env");
 const { createSwaggerSpec } = require("./swagger");
 const { DatabaseService } = require("./services/databaseService");
@@ -9,6 +8,9 @@ const { ForumNodeService } = require("./services/forumNodeService");
 const { ForumScraper } = require("./services/forumScraper");
 const { RutrackerClient } = require("./services/rutrackerClient");
 const { ScrapeService } = require("./services/scrapeService");
+const { TopicParser } = require("./services/topicParser");
+const { TopicScrapeService } = require("./services/topicScrapeService");
+const { TopicService } = require("./services/topicService");
 const { WebSocketHub } = require("./services/webSocketHub");
 
 const logger = {
@@ -18,9 +20,7 @@ const logger = {
 };
 
 const bootstrap = async () => {
-  const app = express();
-  const server = http.createServer(app);
-
+  const server = http.createServer();
   const databaseService = new DatabaseService({
     mongoUri: env.mongoUri,
     dbName: env.mongoDbName,
@@ -28,6 +28,7 @@ const bootstrap = async () => {
     logger
   });
   const forumNodeService = new ForumNodeService();
+  const topicService = new TopicService();
   const forumScraper = new ForumScraper({
     baseUrl: env.rutrackerBaseUrl
   });
@@ -42,6 +43,9 @@ const bootstrap = async () => {
     path: "/ws",
     logger
   });
+  const topicParser = new TopicParser({
+    baseUrl: env.rutrackerBaseUrl
+  });
   const scrapeService = new ScrapeService({
     forumNodeService,
     forumScraper,
@@ -51,95 +55,46 @@ const bootstrap = async () => {
     scrapeOnStartup: env.scrapeOnStartup,
     scrapeStartupDelayMs: env.scrapeStartupDelayMs
   });
+  const topicScrapeService = new TopicScrapeService({
+    forumNodeService,
+    topicService,
+    topicParser,
+    rutrackerClient,
+    webSocketHub,
+    logger,
+    topicMaxTopicsPerRun: env.topicMaxTopicsPerRun
+  });
   const swaggerSpec = createSwaggerSpec({ port: env.port });
-
-  app.use(express.json());
-  app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, { explorer: true }));
-  app.get("/docs/openapi.json", (req, res) => {
-    res.json(swaggerSpec);
+  const app = createApp({
+    databaseService,
+    forumNodeService,
+    topicService,
+    scrapeService,
+    topicScrapeService,
+    swaggerSpec
   });
+  server.on("request", app);
 
-  app.get("/api/health", (req, res) => {
-    res.json({
-      name: "rutracker-parser-api",
-      uptimeSeconds: Math.round(process.uptime()),
-      database: databaseService.getStatus(),
-      scraper: scrapeService.getStatus(),
-      now: new Date().toISOString()
-    });
-  });
-
-  app.get("/api/forum-nodes/tree", async (req, res, next) => {
-    if (!databaseService.isConnected()) {
-      res.status(503).json({
-        message: "MongoDB is not connected yet."
-      });
-      return;
-    }
-
-    try {
-      const snapshot = await forumNodeService.getTreeSnapshot();
-      res.json(snapshot);
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.get("/api/scrape/status", (req, res) => {
-    res.json(scrapeService.getStatus());
-  });
-
-  app.post("/api/scrape/run", (req, res) => {
-    const result = scrapeService.start("manual");
-
-    if (!result.started) {
-      res.status(409).json({
-        message: "Scrape is already running.",
-        status: result.status
-      });
-      return;
-    }
-
-    res.status(202).json({
-      message: "Scrape has been started.",
-      status: result.status
-    });
-  });
-
-  app.use((req, res) => {
-    res.status(404).json({
-      message: "Route not found."
-    });
-  });
-
-  app.use((error, req, res, next) => {
-    if (res.headersSent) {
-      next(error);
-      return;
-    }
-
-    res.status(500).json({
-      message: error.message || "Internal server error."
-    });
-  });
-
-  webSocketHub.onConnection(async (socket) => {
-    webSocketHub.send(socket, "status", scrapeService.getStatus());
-
-    if (!databaseService.isConnected()) {
-      webSocketHub.send(socket, "status", {
-        ...scrapeService.getStatus(),
-        message: "Waiting for MongoDB connection."
-      });
-      return;
-    }
-
-    const snapshot = await forumNodeService.getTreeSnapshot();
-    webSocketHub.send(socket, "tree_snapshot", snapshot);
+  registerWebSocketHandlers({
+    webSocketHub,
+    databaseService,
+    forumNodeService,
+    topicService,
+    scrapeService,
+    topicScrapeService
   });
 
   databaseService.on("connected", () => {
     scrapeService.scheduleStartupScrape();
+    topicScrapeService.tryStartupScrape().catch((error) => {
+      logger.warn(`Unable to start initial topic scrape: ${error.message}`);
+    });
+  });
+
+  scrapeService.on("completed", () => {
+    topicScrapeService.tryStartupScrape().catch((error) => {
+      logger.warn(`Unable to start initial topic scrape after forum scrape: ${error.message}`);
+    });
   });
 
   await databaseService.start();

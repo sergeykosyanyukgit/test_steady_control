@@ -21,5 +21,6 @@ module.exports = {
   rutrackerBbSession: process.env.RUTRACKER_BB_SESSION || "",
   requestTimeoutMs: toNumber(process.env.REQUEST_TIMEOUT_MS, 20000),
   scrapeOnStartup: process.env.SCRAPE_ON_STARTUP !== "false",
-  scrapeStartupDelayMs: toNumber(process.env.SCRAPE_STARTUP_DELAY_MS, 3000)
+  scrapeStartupDelayMs: toNumber(process.env.SCRAPE_STARTUP_DELAY_MS, 3000),
+  topicMaxTopicsPerRun: toNumber(process.env.TOPIC_MAX_TOPICS_PER_RUN, 150)
 };

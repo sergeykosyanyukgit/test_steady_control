@@ -84,6 +84,42 @@ class ForumNodeService {
     return ForumNode.find().sort({ sortOrder: 1, title: 1 }).lean();
   }
 
+  async getNodeByExternalId(externalId) {
+    return ForumNode.findOne({ externalId }).lean();
+  }
+
+  isTopicSourceTreeNode(node) {
+    if (!node) {
+      return false;
+    }
+
+    if (node.type === "subforum") {
+      return true;
+    }
+
+    return node.type === "forum" && (!node.children || node.children.length === 0);
+  }
+
+  async isTopicSourceNode(node) {
+    if (!node) {
+      return false;
+    }
+
+    if (node.type === "subforum") {
+      return true;
+    }
+
+    if (node.type !== "forum") {
+      return false;
+    }
+
+    const childrenCount = await ForumNode.countDocuments({
+      parentExternalId: node.externalId
+    });
+
+    return childrenCount === 0;
+  }
+
   buildTree(nodes) {
     const roots = [];
     const map = new Map();
@@ -144,6 +180,25 @@ class ForumNodeService {
       subforums: nodes.filter((node) => node.type === "subforum").length,
       tree: this.buildTree(nodes)
     };
+  }
+
+  async getFirstTopicSourceNode() {
+    const snapshot = await this.getTreeSnapshot();
+    const stack = [...snapshot.tree];
+
+    while (stack.length > 0) {
+      const node = stack.shift();
+
+      if (this.isTopicSourceTreeNode(node)) {
+        return node;
+      }
+
+      if (node.children && node.children.length > 0) {
+        stack.unshift(...node.children);
+      }
+    }
+
+    return null;
   }
 }
 
