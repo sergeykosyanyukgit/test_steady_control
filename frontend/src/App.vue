@@ -527,8 +527,7 @@ export default {
         this.reconnectTimer = null;
       }
 
-      const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-      const socket = new WebSocket(`${protocol}://${window.location.host}/ws`);
+      const socket = new WebSocket(this.getBackendWebSocketUrl());
 
       this.socket = socket;
       this.socketState = "connecting";
@@ -593,6 +592,12 @@ export default {
           this.connectWebSocket();
         }, 3000);
       };
+    },
+    getBackendWebSocketUrl() {
+      const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+      const hostname = window.location.hostname;
+
+      return `${protocol}://${hostname}:3000/ws`;
     },
     async startScrape() {
       try {

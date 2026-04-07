@@ -4,7 +4,7 @@
 
 - `mongo` для хранения данных.
 - `api` на `Express + Node.js + Axios + MongoDB + WebSocket + Swagger`.
-- `frontend` на `Node.js + Vue 2 + Vuetify`.
+- `frontend` на `Vue 2 + Vuetify`, который в Docker раздаётся через `nginx` без `express`-runtime.
 
 ## Что делает приложение
 
@@ -79,7 +79,7 @@ npm test
 Подключение выполняется к:
 
 ```text
-ws://localhost:8080/ws
+ws://localhost:3000/ws
 ```
 
 Типы сообщений:
