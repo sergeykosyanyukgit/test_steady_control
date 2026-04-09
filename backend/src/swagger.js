@@ -1,6 +1,6 @@
 const swaggerJSDoc = require("swagger-jsdoc");
 
-const createSwaggerSpec = ({ port }) =>
+const createSwaggerSpec = () =>
   swaggerJSDoc({
     definition: {
       openapi: "3.0.3",
@@ -12,8 +12,8 @@ const createSwaggerSpec = ({ port }) =>
       },
       servers: [
         {
-          url: `http://localhost:${port}`,
-          description: "Local server"
+          url: "/",
+          description: "Current origin"
         }
       ],
       components: {
